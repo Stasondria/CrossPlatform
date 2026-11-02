@@ -1,0 +1,17 @@
+[
+  {
+    "id": "P-101",
+    "name": "Смартфон Samsung Galaxy",
+    "price": 32000.00
+  },
+  {
+    "id": "P-102",
+    "name": "Планшет Apple iPad Air",
+    "price": 27500.00
+  },
+  {
+    "id": "P-103",
+    "name": "Смарт-годинник Garmin",
+    "price": 16200.50
+  }
+]

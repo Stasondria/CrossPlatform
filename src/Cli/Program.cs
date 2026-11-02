@@ -1,50 +1,49 @@
-﻿using System;
-using System.Linq;
-using System.Text.Encodings.Web;
-using System.Text.Json;
-using System.Text.Unicode;
-using Core;
+﻿using Core.Dto;
+using Core.Import;
 
 Console.OutputEncoding = System.Text.Encoding.UTF8;
 
-EnvironmentReport report = EnvironmentInfo.Collect();
+// Отримання шляху до файлу з аргументів або за замовчуванням
+string path = args.Length > 0 ? args[0] : Path.Combine("data", "sample.csv");
 
-var outputData = new
+if (!File.Exists(path))
 {
-    Student = "Маліновський Станіслав, група ФЕІ-35",
-    OsDescription = report.OsDescription,
-    Runtime = report.FrameworkDescription,
-    Architecture = report.ProcessArchitecture,
-    DetectedRid = report.DetectedRid,
-    ReportedRid = report.ReportedRid,
-    AppDirectory = report.BaseDirectory,
-    CurrentDirectory = Environment.CurrentDirectory,
-    TfmNote = report.TargetFrameworkNote,
-    Domain = "Замовлення (Customer, Product, Order, OrderLine)"
+    Console.WriteLine($"Помилка: Файл не знайдено за шляхом: {Path.GetFullPath(path)}");
+    return 1;
+}
+
+ImportResult<ProductDto> result;
+string extension = Path.GetExtension(path).ToLowerInvariant();
+
+// Вибір імпортера за розширенням файлу через switch expression
+result = extension switch
+{
+    ".csv" => ProductCsvImporter.Load(path),
+    ".json" => ProductJsonImporter.Load(path),
+    _ => new ImportResult<ProductDto>([], [$"Формат '{extension}' не підтримується."])
 };
 
-if (args.Contains("--json", StringComparer.OrdinalIgnoreCase))
+Console.WriteLine($"=== Звіт імпорту даних ({Path.GetFileName(path)}) ===");
+Console.WriteLine($"Завантажено записів : {result.Items.Count}");
+Console.WriteLine($"Оброблено рядків   : {result.TotalProcessedLines}");
+Console.WriteLine($"Пропущено рядків   : {result.Errors.Count}");
+Console.WriteLine($"Відсоток помилок   : {result.ErrorRate}%");
+Console.WriteLine(new string('-', 55));
+
+Console.WriteLine("Перші завантажені позиції:");
+foreach (ProductDto p in result.Items.Take(5))
 {
-    var options = new JsonSerializerOptions
+    Console.WriteLine($" {p.Id,-6} | {p.Name,-30} | {p.Price,9:F2} грн.");
+}
+
+if (result.Errors.Count > 0)
+{
+    Console.WriteLine(new string('-', 55));
+    Console.WriteLine("Перелік помилок:");
+    foreach (string err in result.Errors)
     {
-        WriteIndented = true,
-        Encoder = JavaScriptEncoder.Create(UnicodeRanges.BasicLatin, UnicodeRanges.Cyrillic)
-    };
-    Console.WriteLine(JsonSerializer.Serialize(outputData, options));
+        Console.WriteLine($" ! {err}");
+    }
 }
-else
-{
-    Console.WriteLine("CrossApp — практикум з крос-платформного програмування");
-    Console.WriteLine($"Студент             : {outputData.Student}");
-    Console.WriteLine(new string('-', 55));
-    Console.WriteLine($"ОС                  : {report.OsDescription}");
-    Console.WriteLine($"Runtime             : {report.FrameworkDescription}");
-    Console.WriteLine($"Архітектура         : {report.ProcessArchitecture}");
-    Console.WriteLine($"RID (визначено)     : {report.DetectedRid}");
-    Console.WriteLine($"RID (від .NET)      : {report.ReportedRid}");
-    Console.WriteLine($"TFM примітка        : {report.TargetFrameworkNote}");
-    Console.WriteLine($"Каталог застосунку : {report.BaseDirectory}");
-    Console.WriteLine($"Поточний каталог    : {Environment.CurrentDirectory}");
-    Console.WriteLine(new string('-', 55));
-    Console.WriteLine($"Предметна область   : {outputData.Domain}");
-}
+
+return 0;
