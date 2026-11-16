@@ -1,49 +1,72 @@
-﻿using Core.Dto;
+﻿using Core.Domain;
+using Core.Dto;
 using Core.Import;
 
 Console.OutputEncoding = System.Text.Encoding.UTF8;
 
-// Отримання шляху до файлу з аргументів або за замовчуванням
-string path = args.Length > 0 ? args[0] : Path.Combine("data", "sample.csv");
+Console.WriteLine("=== Сценарій 1: Успішна робота з доменом (Замовлення) ===");
+var laptop = Product.Create("p-001", "Ноутбук Lenovo ThinkPad", 28500.50m);
+var mouse = Product.Create("p-004", "Бездротова миша Logitech", 1850.75m);
 
-if (!File.Exists(path))
+var order = Order.Create("ord-100", "cust-01");
+Console.WriteLine($"Створено: {order}");
+
+order.AddLine(laptop.Id, laptop.Name, laptop.Price, 1);
+order.AddLine(mouse.Id, mouse.Name, mouse.Price, 2);
+Console.WriteLine($"Після додавання товарів: {order}");
+foreach (var line in order.Lines)
 {
-    Console.WriteLine($"Помилка: Файл не знайдено за шляхом: {Path.GetFullPath(path)}");
-    return 1;
+    Console.WriteLine($"   - {line}");
 }
 
-ImportResult<ProductDto> result;
-string extension = Path.GetExtension(path).ToLowerInvariant();
+order.Confirm();
+Console.WriteLine($"Після підтвердження: {order}");
 
-// Вибір імпортера за розширенням файлу через switch expression
-result = extension switch
+// Перевірка ToDto / FromDto
+OrderDto orderDto = order.ToDto();
+Order restoredOrder = Order.FromDto(orderDto);
+Console.WriteLine($"Відновлено з DTO: {restoredOrder}");
+Console.WriteLine();
+
+Console.WriteLine("=== Сценарій 2: Порушення інваріантів ===");
+TryDo("Порожній номер замовлення", () => Order.Create("", "CUST-01"));
+TryDo("Від'ємна ціна товару", () => Product.Create("P-99", "Брак", -100m));
+TryDo("Нульова кількість у рядку", () =>
 {
-    ".csv" => ProductCsvImporter.Load(path),
-    ".json" => ProductJsonImporter.Load(path),
-    _ => new ImportResult<ProductDto>([], [$"Формат '{extension}' не підтримується."])
-};
-
-Console.WriteLine($"=== Звіт імпорту даних ({Path.GetFileName(path)}) ===");
-Console.WriteLine($"Завантажено записів : {result.Items.Count}");
-Console.WriteLine($"Оброблено рядків   : {result.TotalProcessedLines}");
-Console.WriteLine($"Пропущено рядків   : {result.Errors.Count}");
-Console.WriteLine($"Відсоток помилок   : {result.ErrorRate}%");
-Console.WriteLine(new string('-', 55));
-
-Console.WriteLine("Перші завантажені позиції:");
-foreach (ProductDto p in result.Items.Take(5))
+    var draft = Order.Create("ORD-101", "CUST-01");
+    draft.AddLine("P-001", "Ноутбук", 1000m, 0);
+});
+TryDo("Додавання рядка у підтверджене замовлення", () =>
+    order.AddLine("P-005", "Навушники", 2000m, 1));
+TryDo("Підтвердження порожнього замовлення", () =>
 {
-    Console.WriteLine($" {p.Id,-6} | {p.Name,-30} | {p.Price,9:F2} грн.");
+    var emptyOrder = Order.Create("ORD-102", "CUST-02");
+    emptyOrder.Confirm();
+});
+TryDo("Повторне підтвердження замовлення", () => order.Confirm());
+
+Console.WriteLine($"\nСтан замовлення після всіх помилкових спроб не змінився:\n{order}");
+Console.WriteLine();
+
+// Додаткове завдання #1: Інтеграція з імпортом тижня 3
+string csvPath = Path.Combine("data", "sample.csv");
+if (File.Exists(csvPath))
+{
+    Console.WriteLine("=== Додаткове: Перетворення ImportResult -> Доменні сутності ===");
+    var importResult = ProductCsvImporter.Load(csvPath);
+    var (domainProducts, errors) = DomainMapper.ToDomainProducts(importResult);
+    Console.WriteLine($"Валідних доменних товарів: {domainProducts.Count}, Всього помилок: {errors.Count}");
 }
 
-if (result.Errors.Count > 0)
+static void TryDo(string title, Action action)
 {
-    Console.WriteLine(new string('-', 55));
-    Console.WriteLine("Перелік помилок:");
-    foreach (string err in result.Errors)
+    try
     {
-        Console.WriteLine($" ! {err}");
+        action();
+        Console.WriteLine($" [ПОМИЛКА ТЕСТУ] {title}: виняток НЕ спрацював!");
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($" {title}: {ex.GetType().Name} — {ex.Message}");
     }
 }
-
-return 0;
